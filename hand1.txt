@@ -1,0 +1,48 @@
+# --- hole cards -------------------------------------------------
+HAND UTG     Ad Kd
+HAND UTG+1   7c 7d
+HAND UTG+2   Jh Qd
+HAND LJ      8s 9s
+HAND HJ      9h 9d
+HAND CO      2c 2h
+HAND BTN     Jc Tc
+HAND SB      Ah Kh
+HAND BB      6h 7h
+
+# --- pre-flop ---------------------------------------------------
+UTG raise 2.5
+UTG+1 fold
+UTG+2 call 2.5
+LJ fold
+HJ call 2.5
+CO fold
+BTN fold
+SB call 2.0
+BB call 1.5
+
+# --- flop -------------------------------------------------------
+FLOP 3d 4c 9s
+SB check
+BB check
+UTG bet 5
+UTG+2 fold
+HJ raise 12
+SB call 12
+BB fold
+UTG fold
+
+# --- turn -------------------------------------------------------
+TURN Qh
+SB check
+HJ bet 20
+SB call 20
+
+# --- river ------------------------------------------------------
+RIVER 2c
+SB check
+HJ check
+
+# --- showdown ---------------------------------------------------
+# SHOWDOWN: HJ shows 9h 9d (three of a kind)
+# SHOWDOWN: SB shows Ah Kh (ace high)
+# WINNER: HJ wins the pot

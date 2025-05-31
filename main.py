@@ -1,16 +1,15 @@
+# main.py
+
 import sys
 import math
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton)
-from PyQt5.QtCore import pyqtSignal, Qt
-from PyQt5.QtGui import QPixmap
-from cards import Deck
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QLabel, QPushButton
+from PyQt5.QtCore    import pyqtSignal, Qt
+from PyQt5.QtGui     import QPixmap
 
+from poker_utility import load_script, Deck, ParsedHand, Action
 
 class PlayerView(QWidget):
-    """
-    A circular seat indicator for a player.
-    """
-    def __init__(self, x, y, size, parent=None):
+    def __init__(self, x: int, y: int, size: int, parent=None):
         super().__init__(parent)
         # center the widget
         self.setGeometry(x - size//2, y - size//2, size, size)
@@ -21,113 +20,65 @@ class PlayerView(QWidget):
             f"background-color: rgba(200,200,200,180); border-radius: {size//2}px;"
         )
 
-
 class MainWindow(QMainWindow):
-    def __init__(self, background_path, num_players=6):
+    def __init__(self, background_path: str, num_players: int = 6):
         super().__init__()
-        self.setWindowTitle("Poker Replay System - Table View")
-        self.setGeometry(200, 100, 1920, 1080)
+        self.setWindowTitle("Poker Replay System")
+        self.setGeometry(100, 50, 1200, 800)
 
         self.background_path = background_path
-        # clamp between 2 and 9
-        self.num_players = max(2, min(num_players, 9))
-        # placeholder for each player's two-card hand
-        self.players_hands = [[] for _ in range(self.num_players)]
+        self.num_players     = max(2, min(num_players, 9))
 
-        # central widget for absolute positioning
+        # ---- state to draw ----
+        self.players_hands = [[] for _ in range(self.num_players)]
+        self.board_cards    = {"flop": [], "turn": [], "river": []}
+        self.actions: list[Action] = []
+        self.current_index = -1
+        self.prev_highlight = None
+
+        # ---- UI widgets ----
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
 
-        # background label
         self.bg_label = QLabel(self.central_widget)
         self.bg_label.setGeometry(0, 0, self.width(), self.height())
-        pixmap = QPixmap(self.background_path)
-        self.bg_label.setPixmap(
-            pixmap.scaled(
-                self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
-            )
-        )
+        pix = QPixmap(self.background_path)
+        self.bg_label.setPixmap(pix.scaled(
+            self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
+        ))
 
-        # action text overlay
         self.action_label = QLabel("", self.central_widget)
         self.action_label.setStyleSheet(
-            "color: black; font-size: 24px; background: rgba(255,255,255,200);"
+            "background: rgba(255,255,255,200); font-size: 18px;"
         )
         self.action_label.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
-        self.action_label.setGeometry(0, 0, self.width(), 50)
+        self.action_label.setGeometry(0, 0, self.width(), 40)
 
-        # replay action list
-        self.actions = []
-        self.current_index = -1
-
-        # storage for created player view widgets
         self.player_views = []
+        self.card_labels  = []
+        self.board_labels = []
 
     def resizeEvent(self, event):
-        # update background and action bar
+        # keep bg + banner sized
         self.bg_label.setGeometry(0, 0, self.width(), self.height())
-        pixmap = QPixmap(self.background_path)
-        self.bg_label.setPixmap(
-            pixmap.scaled(
-                self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
-            )
-        )
-        self.action_label.setGeometry(0, 0, self.width(), 50)
-        # reposition seats and cards
+        pix = QPixmap(self.background_path)
+        self.bg_label.setPixmap(pix.scaled(
+            self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
+        ))
+        self.action_label.setGeometry(0, 0, self.width(), 40)
         self._position_players()
         return super().resizeEvent(event)
 
-    def _position_players(self):
-        # clear any previous widgets
-        for w in self.player_views + getattr(self, 'card_labels', []):
-            w.setParent(None)
-        self.player_views = []
-        self.card_labels = []
-
-        # layout parameters
-        radius_x = self.width() * 0.35
-        radius_y = self.height() * 0.35
-        center_x = self.width() / 2
-        center_y = self.height() / 2
-        seat_size = 80
-
-        for i in range(self.num_players):
-            # compute position around an ellipse
-            angle = math.pi/2 + i * 2 * math.pi / self.num_players
-            x = center_x + math.cos(angle) * radius_x
-            y = center_y + math.sin(angle) * radius_y
-            # draw seat
-            pv = PlayerView(int(x), int(y), seat_size, parent=self.central_widget)
-            pv.show()
-            self.player_views.append(pv)
-            # draw the two cards for this player
-            hand = self.players_hands[i]
-            for j, card in enumerate(hand):
-                card_lbl = QLabel(self.central_widget)
-                pix = QPixmap(card.image_path)
-                cw, ch = 60, 90
-                card_lbl.setPixmap(
-                    pix.scaled(cw, ch, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                )
-                # position the two cards BELOW the seat
-                offset_x = -cw - 5 if j == 0 else 5
-                card_lbl.setGeometry(
-                    int(x) + offset_x,
-                    int(y) + seat_size//2 + 5,
-                    cw, ch
-                )
-                card_lbl.show()
-                self.card_labels.append(card_lbl)
-
-    def set_hands(self, hands_list):
-        """Assign each player's two-card hand and redraw."""
-        self.num_players = len(hands_list)
-        self.players_hands = hands_list
+    def set_state_from_parsed(self, parsed: ParsedHand):
+        # load hole cards
+        self.players_hands = [
+            [c for c in seat if c is not None] for seat in parsed.hole_cards
+        ]
         self._position_players()
 
-    def load_actions(self, actions):
-        self.actions = actions
-        if actions:
+    def load_actions(self, moves: list[Action]):
+        self.actions = moves
+        if moves:
             self.current_index = 0
             self.update_action()
 
@@ -141,9 +92,95 @@ class MainWindow(QMainWindow):
             self.current_index -= 1
             self.update_action()
 
-    def update_action(self):
-        self.action_label.setText(self.actions[self.current_index])
+    def highlight_seat(self, idx: int, on: bool):
+        colour = "rgba(255,215,0,200)" if on else "rgba(200,200,200,180)"
+        view = self.player_views[idx]
+        r = view.circle.width() // 2
+        view.circle.setStyleSheet(f"background-color: {colour}; border-radius: {r}px;")
 
+    def update_action(self):
+        move = self.actions[self.current_index]
+        self.action_label.setText(move.raw)
+
+        # reveal board cards when the flop/turn/river move occurs
+        if move.verb in ("flop", "turn", "river") and move.cards:
+            self.board_cards[move.verb] = move.cards
+            self._position_players()
+
+        # highlight only real seat moves
+        if move.seat is not None:
+            if self.prev_highlight is not None:
+                self.highlight_seat(self.prev_highlight, False)
+            self.highlight_seat(move.seat, True)
+            self.prev_highlight = move.seat
+
+    def _position_players(self):
+        # clear previous widgets
+        for w in self.player_views + self.card_labels + self.board_labels:
+            w.setParent(None)
+        self.player_views.clear()
+        self.card_labels.clear()
+        self.board_labels.clear()
+
+        # draw seats & hole cards
+        cx, cy = self.width()/2, self.height()/2
+        rx, ry = self.width()*0.35, self.height()*0.35
+        seat_size = 150   # ~2.5× bigger
+
+        card_w, card_h = 100, 150  # ~2× bigger
+        card_gap = 10
+
+        for i in range(self.num_players):
+            angle = math.pi/2 + i*2*math.pi/self.num_players
+            x = cx + math.cos(angle) * rx
+            y = cy + math.sin(angle) * ry
+
+            # seat circle
+            pv = PlayerView(int(x), int(y), seat_size, parent=self.central_widget)
+            pv.show()
+            self.player_views.append(pv)
+
+            # hole cards
+            hand = self.players_hands[i]
+            for j, card in enumerate(hand):
+                lbl = QLabel(self.central_widget)
+                lbl.setPixmap(
+                    QPixmap(card.image_path).scaled(
+                        card_w, card_h,
+                        Qt.KeepAspectRatio, Qt.SmoothTransformation
+                    )
+                )
+                offset_x = -card_w - 10 if j == 0 else 10
+                lbl.setGeometry(
+                    int(x + offset_x),
+                    int(y + seat_size//2 + 10),
+                    card_w, card_h
+                )
+                lbl.show()
+                self.card_labels.append(lbl)
+
+        # draw community cards
+        board = self.board_cards["flop"] + self.board_cards["turn"] + self.board_cards["river"]
+        total = len(board)
+        full_width = card_w*5 + card_gap*4
+        start_x = cx - full_width/2 + (full_width - (total*card_w + (total-1)*card_gap))/2
+        y = cy - card_h//2
+
+        for idx, card in enumerate(board):
+            lbl = QLabel(self.central_widget)
+            lbl.setPixmap(
+                QPixmap(card.image_path).scaled(
+                    card_w, card_h,
+                    Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+            )
+            lbl.setGeometry(
+                int(start_x + idx*(card_w + card_gap)),
+                int(y),
+                card_w, card_h
+            )
+            lbl.show()
+            self.board_labels.append(lbl)
 
 class ControllerWindow(QWidget):
     next_clicked = pyqtSignal()
@@ -151,45 +188,29 @@ class ControllerWindow(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Controller")
-        self.setGeometry(1000, 100, 300, 200)
+        self.setWindowTitle("Controls")
+        self.setGeometry(50, 50, 200, 120)
         self.prev_btn = QPushButton("Previous", self)
-        self.prev_btn.setGeometry(50, 30, 200, 40)
+        self.prev_btn.setGeometry(10, 10, 180, 40)
         self.next_btn = QPushButton("Next", self)
-        self.next_btn.setGeometry(50, 90, 200, 40)
+        self.next_btn.setGeometry(10, 70, 180, 40)
         self.prev_btn.clicked.connect(self.prev_clicked)
         self.next_btn.clicked.connect(self.next_clicked)
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    background_path = "assets/table_background.png"
-    num_players = 6  # adjust up to 9
+    NUM = 9
+    parsed = load_script("hand1.txt", NUM)
 
-    main_win = MainWindow(background_path, num_players=num_players)
-    ctrl_win = ControllerWindow()
+    mw = MainWindow("assets/table_background.png", NUM)
+    mw.set_state_from_parsed(parsed)
+    mw.load_actions(parsed.actions)
 
-    # connect replay controls
-    ctrl_win.next_clicked.connect(main_win.next_action)
-    ctrl_win.prev_clicked.connect(main_win.prev_action)
+    ctrl = ControllerWindow()
+    ctrl.next_clicked.connect(mw.next_action)
+    ctrl.prev_clicked.connect(mw.prev_action)
 
-    # example replay actions
-    sample_actions = [
-        "Player1 posts small blind",
-        "Player2 posts big blind",
-        "Player3 calls 2",
-        "Deal flop: A♠ K♥ 10♦",
-        "Player1 bets 5",
-        "Showdown: Player2 wins"
-    ]
-    main_win.load_actions(sample_actions)
-
-    # deal and set hole cards
-    deck = Deck().shuffle()
-    hands = [deck.deal(2) for _ in range(num_players)]
-    main_win.set_hands(hands)
-
-    main_win.show()
-    ctrl_win.show()
+    mw.show()
+    ctrl.show()
     sys.exit(app.exec_())
